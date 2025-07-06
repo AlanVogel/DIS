@@ -4,9 +4,9 @@ from .redis_service import RedisService
 from .rag_service import RAGService
 
 class DocumentService:
-    def __init__(self):
-        self.redis_service = RedisService()
-        self.rag_service = RAGService()
+    def __init__(self, redis_service: RedisService ,rag_service: RAGService):
+        self.redis_service = redis_service
+        self.rag_service = rag_service
         self.strategies = {
             ".pdf": PDFExtractionStrategy(),
             ".jpg": ImageExtractionStrategy(),

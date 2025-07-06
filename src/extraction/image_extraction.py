@@ -1,5 +1,6 @@
-import easyocr
 import io
+import easyocr
+import numpy as np
 from PIL import Image
 from .extraction_strategy import ExtractionStrategy
 
@@ -10,7 +11,9 @@ class ImageExtractionStrategy(ExtractionStrategy):
     def extract_text(self, file_content: bytes) -> str:
         try:
             image = Image.open(io.BytesIO(file_content))
-            result = self.reader.readtext(image, detail=0)
-            return " ".join(result)
+            image = image.convert("L")
+            image_np = np.array(image)
+            result = self.reader.readtext(image_np, detail=0)
+            return " ".join(result) if result else ""
         except Exception as e:
             raise ValueError(f"Image extraction failed: {str(e)}")

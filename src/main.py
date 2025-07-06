@@ -7,6 +7,8 @@ from slowapi.errors import RateLimitExceeded
 from models.schema import Login, QuestionRequest
 from services.qa_service import QAService
 from services.document_service import DocumentService
+from services.rag_service import RAGService
+from services.redis_service import RedisService
 from utils.security import create_access_token, verify_token
 from utils.sanitizer import sanitize_input
 
@@ -17,6 +19,8 @@ class RouteHandler:
         self.qa_service = qa_service
         self.api_server = api_server
         self.app = api_server.app
+        self.oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+        self.configure_routes()
 
     @staticmethod
     def verify_token(token: str):
@@ -35,9 +39,8 @@ class RouteHandler:
 
         @self.app.post("/upload")
         @self.api_server.limiter.limit("5/minute")
-        async def upload_files(request: Request, files: List[UploadFile] = File(...), token: str = Depends(self.api_server.oauth2_scheme)):
+        async def upload_files(request: Request, files: List[UploadFile] = File(...), token: str = Depends(self.oauth2_scheme)):
             verify_token(token)
-            document_service = DocumentService()
             results = []
             for file in files:
                 if file.filename is None:
@@ -46,17 +49,16 @@ class RouteHandler:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, 
                                         detail="Unsupported file type")
                 content = await file.read()
-                result = document_service.process_document(file.filename, content)
+                result = self.document_service.process_document(file.filename, content)
                 results.append({"filename": file.filename, "extracted_text": result})
             return {"results": results}
 
         @self.app.post("/ask")
         @self.api_server.limiter.limit("10/minute")
-        async def ask_question(request: Request, request_body: QuestionRequest, token: str = Depends(self.api_server.oauth2_scheme)):
+        async def ask_question(request: Request, request_body: QuestionRequest, token: str = Depends(self.oauth2_scheme)):
             verify_token(token)
             sanitized_question = sanitize_input(request_body.question)
-            qa_service = QAService()
-            answer, entities = qa_service.answer_question(sanitized_question)
+            answer, entities = self.qa_service.answer_question(sanitized_question)
             return {"question": sanitized_question, "answer": answer, "entities": entities}
 
 class APIServer:
@@ -64,10 +66,12 @@ class APIServer:
     def __init__(self):
         self.app = FastAPI()
         self.limiter = Limiter(key_func=get_remote_address)
-        self.document_service = DocumentService()
-        self.qa_service = QAService()
+        self.redis_service = RedisService()
+        self.rag_service = RAGService(redis_service=self.redis_service)
+        self.document_service = DocumentService(redis_service=self.redis_service, rag_service=self.rag_service)
+        self.qa_service = QAService(rag_service=self.rag_service)
         self.route_handler = RouteHandler(self.document_service, self.qa_service, self)
-        self.oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+        self._setup_limiter()
 
     def _setup_limiter(self):
         """Set up limiter and exception handler for rate limiting."""

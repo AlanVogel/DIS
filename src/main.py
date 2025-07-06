@@ -14,7 +14,27 @@ from utils.sanitizer import sanitize_input
 
 
 class RouteHandler:
+    """Handles routing configuration for the FastAPI application.
+
+    Manages the definition and setup of API endpoints for authentication,
+    file upload, and question answering.
+
+    Attributes:
+        document_service (DocumentService): Service for document processing.
+        qa_service (QAService): Service for question answering.
+        api_server (APIServer): Reference to the API server instance.
+        app (FastAPI): FastAPI application instance.
+        oauth2_scheme (OAuth2PasswordBearer): OAuth2 scheme for token-based auth.
+
+    """
     def __init__(self, document_service: DocumentService, qa_service: QAService, api_server: "APIServer"):
+        """Initialize RouteHandler with required services and server.
+
+        Args:
+            document_service (DocumentService): Document processing service.
+            qa_service (QAService): Question answering service.
+            api_server (APIServer): API server instance.
+        """
         self.document_service = document_service
         self.qa_service = qa_service
         self.api_server = api_server
@@ -24,6 +44,17 @@ class RouteHandler:
 
     @staticmethod
     def verify_token(token: str):
+        """Verify the authenticity of a JWT token.
+
+        Args:
+            token (str): JWT token to verify.
+
+        Returns:
+            dict: Decoded payload if valid.
+
+        Raises:
+            HTTPException: If token verification fails.
+        """
         return verify_token(token)
     
     def configure_routes(self) -> None:
@@ -62,8 +93,22 @@ class RouteHandler:
             return {"question": sanitized_question, "answer": answer, "entities": entities}
 
 class APIServer:
-    
+    """Main server class for setting up the FastAPI application.
+
+    Configures services, routes, and rate limiting for the API.
+
+    Attributes:
+        app (FastAPI): FastAPI application instance.
+        limiter (Limiter): Rate limiter instance.
+        redis_service (RedisService): Redis connection service.
+        rag_service (RAGService): Retrieval-Augmented Generation service.
+        document_service (DocumentService): Document processing service.
+        qa_service (QAService): Question answering service.
+        route_handler (RouteHandler): Route configuration handler.
+
+    """
     def __init__(self):
+        """Initialize APIServer with all required services and configurations."""
         self.app = FastAPI()
         self.limiter = Limiter(key_func=get_remote_address)
         self.redis_service = RedisService()
@@ -79,6 +124,11 @@ class APIServer:
         self.app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) #type: ignore
 
     def get_app(self) -> FastAPI:
+        """Get the FastAPI application instance.
+
+        Returns:
+            FastAPI: Configured application instance.
+        """
         return self.app
 
 app = APIServer().get_app()
